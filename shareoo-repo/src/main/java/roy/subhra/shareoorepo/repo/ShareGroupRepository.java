@@ -13,9 +13,9 @@ import java.util.Set;
 public interface ShareGroupRepository  extends CrudRepository<ShareGroup, String> {
 
 
-    Iterable<ShareGroup> findAllByMembersContains(@Param("members") String memberId);
+    Iterable<ShareGroup> findAllByMembersContainsAndActiveIsTrue(@Param("members") String memberId);
 
-    @Query("{{'members : {$all:?0}'},{'active':true}}")
+    @Query("{{'members' : {$all:?0}},{'active':true}}")
     Set<ShareGroup> findAllByMembersContainsAll(@Param("members") List<String> memberIds);
 
 

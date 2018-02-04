@@ -1,0 +1,27 @@
+server:
+  port: 8080
+spring:
+  cloud:
+    stream:
+      bindings:
+        output:
+          destination: shareoo-exchange
+          group: shareoo
+          binder: shareoo-stream
+          content-type: application/json
+      binders:
+        shareoo-stream:
+          type: rabbit
+          environment:
+            spring:
+              rabbitmq:
+                host: localhost
+                port: 5672
+                username: guest
+                password: guest
+  application:
+    name: shareoo-repo
+eureka:
+  client:
+    serviceUrl:
+      defaultZone: ${EUREKA_URI:http://localhost:8761/eureka}

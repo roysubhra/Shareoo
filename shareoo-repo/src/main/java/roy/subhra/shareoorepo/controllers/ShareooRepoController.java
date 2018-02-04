@@ -1,14 +1,10 @@
 package roy.subhra.shareoorepo.controllers;
 
-import org.jboss.logging.Param;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.web.bind.annotation.*;
 import roy.subhra.shareoorepo.exceptions.ResourceNotFoundException;
-import roy.subhra.shareoorepo.model.Settlement;
-import roy.subhra.shareoorepo.model.ShareGroup;
-import roy.subhra.shareoorepo.model.User;
-import roy.subhra.shareoorepo.repo.SettlementRepository;
+import roy.subhra.shareoorepo.model.*;
 import roy.subhra.shareoorepo.repo.ShareGroupRepository;
 import roy.subhra.shareoorepo.repo.UserRepository;
 
@@ -23,8 +19,7 @@ public class ShareooRepoController {
     @Autowired
     private ShareGroupRepository shareGroupRepository;
     @Autowired
-    private SettlementRepository settlementRepository;
-
+    EventFactory eventFactory;
 
     @GetMapping(path = "/{id}")
     public @ResponseBody Optional<User> findById(@PathVariable String id){
@@ -52,7 +47,7 @@ public class ShareooRepoController {
     public @ResponseBody Iterable<ShareGroup> findCurrentShareGroups(@PathVariable String id){
         Optional<User> optionalUser = userRepository.findById(id);
         if(optionalUser.isPresent()){
-           return shareGroupRepository.findAllByMembersContains(optionalUser.get().getRegNumber());
+           return shareGroupRepository.findAllByMembersContainsAndActiveIsTrue(optionalUser.get().getRegNumber());
             //return shareGroupRepository.findAll();
         }else{
             throw new ResourceNotFoundException("User Not Found!");
@@ -69,6 +64,22 @@ public class ShareooRepoController {
         }
     }
 
+    @PutMapping(path = "/{id}/sharegroups/{id2}")
+    public @ResponseBody Optional<ShareGroup> updateShareGroup(@PathVariable String id, @PathVariable String id2 , @RequestBody ShareGroup group){
+        Optional<User> optionalUser = userRepository.findById(id);
+        if(optionalUser.isPresent()){
+            Optional<ShareGroup>  grp = shareGroupRepository.findByShareGroupIdAndMembersContains(id2,optionalUser.get().getRegNumber());
+            if(grp.isPresent()){
+                shareGroupRepository.save(group);
+            }else{
+                throw new ResourceNotFoundException("User Group Not Found!");
+            }
+        }else{
+            throw new ResourceNotFoundException("User Not Found!");
+        }
+        return Optional.of(group);
+    }
+
     @PostMapping(path = "/{id}/sharegroups")
     public @ResponseBody ShareGroup createShareGroup(@PathVariable String id, @RequestBody ShareGroup shareGroup){
 
@@ -81,8 +92,8 @@ public class ShareooRepoController {
             shareGroup.setCreatedBy(optionalUser.get().getRegNumber());
             shareGroup.setExpenses(new ArrayList<>());
             shareGroup.setLiabilities(new HashMap<>());
-            shareGroup.getLiabilities().put(optionalUser.get().getRegNumber(),new HashMap<>());
             shareGroup.setSettlements(new ArrayList<>());
+            shareGroup.setActive(true);
             return shareGroupRepository.save(shareGroup);
         }else{
             throw new ResourceNotFoundException("User Not Found!");
@@ -91,19 +102,28 @@ public class ShareooRepoController {
 
     @GetMapping(path = "/{id}/sharegroups/{id2}/members")
     public @ResponseBody Iterable<User> findShareGroupMembers(@PathVariable String id, @PathVariable String id2 ){
-
-        Optional<User> optionalUser = userRepository.findById(id);
-        if(optionalUser.isPresent()){
             Optional<ShareGroup> optionalShareGroup = findShareGroupById(id,id2);
             if(optionalShareGroup.isPresent()){
                 return userRepository.findAllById(optionalShareGroup.get().getMembers());
             }else{
                 throw new ResourceNotFoundException("ShareGroup Not Found!");
             }
-        }else{
-            throw new ResourceNotFoundException("User Not Found!");
-        }
+
     }
+
+    @GetMapping(path = "/{id}/sharegroups/{id2}/expenses")
+    public @ResponseBody List<Expense> findShareGroupExpenses(@PathVariable String id, @PathVariable String id2 ){
+
+
+            Optional<ShareGroup> optionalShareGroup = findShareGroupById(id,id2);
+            if(optionalShareGroup.isPresent()){
+                return optionalShareGroup.get().getExpenses();
+            }else{
+                throw new ResourceNotFoundException("ShareGroup Not Found!");
+            }
+
+    }
+
     @PostMapping(path = "/{id}/sharegroups/{id2}/members/{idToAdd}")
     public @ResponseBody Iterable<User> addGroupMember(@PathVariable String id, @PathVariable String id2,@PathVariable String idToAdd ){
 
@@ -120,7 +140,8 @@ public class ShareooRepoController {
                     shareGroup.getMembers().add(optionalAddUser.get().getRegNumber());
                     shareGroup.getLiabilities().put(optionalAddUser.get().getRegNumber(),new HashMap<>());
 
-                    shareGroupRepository.save(shareGroup);
+                    shareGroup = shareGroupRepository.save(shareGroup);
+                    eventFactory.raiseEvent(EventType.REBALANCE,optionalUser.get().getRegNumber(),shareGroup);
                     return findShareGroupMembers(id,id2);
                 }else {
                     throw new ResourceNotFoundException("User to Add Not Found!");
@@ -133,27 +154,58 @@ public class ShareooRepoController {
         }
     }
 
-    @GetMapping(path = "/{id}/settlements")
-    public @ResponseBody Iterable<Settlement> findSettlementsForUser(@PathVariable String id){
+    @PostMapping(path = "/{id}/sharegroups/{id2}/expenses")
+    public @ResponseBody List<Expense> addExpenseToShareGroup(@PathVariable String id, @PathVariable String id2,@RequestBody Expense expense){
         Optional<User> optionalUser = userRepository.findById(id);
         if(optionalUser.isPresent()){
-            return settlementRepository.findAllRelatedToMe(optionalUser.get().getRegNumber());
-        }else {
+            Optional<ShareGroup> optionalShareGroup = findShareGroupById(id,id2);
+            if(optionalShareGroup.isPresent()){
+                ShareGroup shareGroup = optionalShareGroup.get();
+                expense.setCreatedBy(optionalUser.get().getRegNumber());
+                shareGroup.getExpenses().add(expense);
+                shareGroup = shareGroupRepository.save(shareGroup);
+                eventFactory.raiseEvent(EventType.REBALANCE,optionalUser.get().getRegNumber(),shareGroup);
+                return shareGroup.getExpenses();
+            }else{
+                throw new ResourceNotFoundException("ShareGroup Not Found!");
+            }
+        }else{
             throw new ResourceNotFoundException("User Not Found!");
         }
     }
-    @PostMapping(path = "/{fromId}/settlements/{toId}")
-    public @ResponseBody Settlement settleBill (@PathVariable String fromId,@PathVariable String toId, @RequestBody Settlement settlement){
-        Optional<User> optionalUserTo = userRepository.findById(fromId);
-        Optional<User> optionalUserFrom = userRepository.findById(toId);
-        if(optionalUserTo.isPresent() && optionalUserFrom.isPresent()){
+
+    @GetMapping(path = "/{id}/sharegroups/{id2}/settlements")
+    public @ResponseBody Iterable<Settlement> findSettlementsForUser(@PathVariable String id, @PathVariable String id2){
+        Optional<User> optionalUser = userRepository.findById(id);
+        if(optionalUser.isPresent()){
+            Optional<ShareGroup> optionalShareGroup = findShareGroupById(id,id2);
+            if(optionalShareGroup.isPresent()){
+                return optionalShareGroup.get().getSettlements();
+            }else{
+                throw new ResourceNotFoundException("ShareGroup Not Found!");
+            }
+        }else{
+            throw new ResourceNotFoundException("User Not Found!");
+        }
+    }
+    @PostMapping(path = "/{id}/sharegroups/{id2}/settlements")
+    public @ResponseBody List<Settlement> settleBill (@PathVariable String id,@PathVariable String id2, @RequestBody Settlement settlement){
+        Optional<User> optionalUserTo = userRepository.findById(settlement.getPaidTo());
+        Optional<User> optionalUserFrom = userRepository.findById(id);
+        Optional<ShareGroup> optionalShareGroup = findShareGroupById(id,id2);
+        if(optionalUserTo.isPresent() && optionalUserFrom.isPresent() && optionalShareGroup.isPresent() ){
             settlement.setPaidBy(optionalUserFrom.get().getRegNumber());
             settlement.setPaidTo(optionalUserTo.get().getRegNumber());
-            //TODO-Trigger Settlement Event
-            return settlementRepository.save(settlement);
-
+            ShareGroup shareGroup = optionalShareGroup.get();
+            if(shareGroup.getSettlements() == null){
+                shareGroup.setSettlements(new ArrayList<>());
+            }
+            shareGroup.getSettlements().add(settlement);
+            shareGroup = shareGroupRepository.save(shareGroup);
+            eventFactory.raiseEvent(EventType.REBALANCE,optionalUserFrom.get().getRegNumber(),shareGroup);
+            return  shareGroup.getSettlements();
         }else {
-            throw new ResourceNotFoundException("User Not Found!");
+            throw new ResourceNotFoundException("User or ShareGroup Not Found!");
         }
     }
 }
