@@ -33,11 +33,12 @@ import java.util.stream.Collectors;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 import static org.springframework.test.web.servlet.setup.MockMvcBuilders.webAppContextSetup;
 
 @RunWith(SpringJUnit4ClassRunner.class)
-@SpringBootTest(classes = {ShareooEurekaApplication.class,ShareooRepoApplication.class}, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(classes = {ShareooRepoApplication.class}, webEnvironment = SpringBootTest.WebEnvironment.DEFINED_PORT)
 @ContextConfiguration(classes = {ShareooRepoApplication.class}, loader = SpringBootContextLoader.class)
 @AutoConfigureWebMvc
 @AutoConfigureMockMvc
@@ -68,14 +69,22 @@ public class ShareooRepoStepDef implements En{
             userRepo.saveAll(users);
         });
         And("^Following Share Groups Exist$", (DataTable table) -> {
-            List<ShareGroup> groups = table.asList(ShareGroup.class);
-            groupRepo.deleteAll();
+            List<String> jsonList = table.asList(String.class);
+            ObjectMapper mapper = new ObjectMapper();
+            List<ShareGroup> groups = jsonList.stream().map(json->{
+                try {
+                    return mapper.readValue(json , ShareGroup.class);
+                } catch (IOException e) {
+                    throw new CucumberException(e);
+                }
+            }).collect(Collectors.toList());
+
             groupRepo.saveAll(groups);
         });
 
         When("^User calls GET on path:(.*)$", (String path) -> {
             try {
-                resultActions = this.mockMvc.perform(get(getUrl(path)).accept(MediaType.APPLICATION_JSON));
+                resultActions = this.mockMvc.perform(get(getUrl(path)).contentType(MediaType.APPLICATION_JSON).accept(MediaType.APPLICATION_JSON));
                 }catch(Exception e){
                     throw new CucumberException(e);
                 }
@@ -123,14 +132,6 @@ public class ShareooRepoStepDef implements En{
             }).collect(Collectors.toList());
 
             groupRepo.saveAll(groups);
-        });
-        And("^Liabilities for path:(.*) equals (.*)$", (String path, String liabilityJson) -> {
-            try {
-                ResultActions resultAck = this.mockMvc.perform(get(getUrl(path)).accept(MediaType.APPLICATION_JSON));
-                resultAck.andExpect(jsonPath("$._embedded.content.liabilities").value(liabilityJson));
-            } catch (Exception e) {
-                throw new CucumberException(e);
-            }
         });
     }
     private String getUrl(String path){

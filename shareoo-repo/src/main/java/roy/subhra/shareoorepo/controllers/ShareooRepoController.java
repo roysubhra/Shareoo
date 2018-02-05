@@ -47,7 +47,7 @@ public class ShareooRepoController {
     public @ResponseBody Iterable<ShareGroup> findCurrentShareGroups(@PathVariable String id){
         Optional<User> optionalUser = userRepository.findById(id);
         if(optionalUser.isPresent()){
-           return shareGroupRepository.findAllByMembersContainsAndActiveIsTrue(optionalUser.get().getRegNumber());
+           return shareGroupRepository.findAllByMembersContains(optionalUser.get().getRegNumber());
             //return shareGroupRepository.findAll();
         }else{
             throw new ResourceNotFoundException("User Not Found!");
