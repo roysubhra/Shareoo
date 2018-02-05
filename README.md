@@ -31,4 +31,21 @@ Segregating the Architecture layers into a 4 tier model provides benefits of the
 This inherently supports distributed environment. 
 Further reactivity  makes calls nonblocking and allows to become resilient. Ideally each functionality would be developed using a feature toggle, but by becoming reactive we do not need to have a plethora of conditions to support toggles.
 Individual service can turn on and turn off it self based on toggles and stop processing the event. 
-Keeping the DataStructure different for Read and Write allows for specialized services and repos and faster retrieval through pre aggregated, cached data (tire omitted from initial Pilot). 
+Keeping the DataStructure different for Read and Write allows for specialized services and repos and faster retrieval through pre aggregated, cached data (tire omitted from initial Pilot).
+
+## POC
+To Execute 
+1. Start shareoo-eureka
+2. Start Rabbit MQ 
+3. Start shareoo-repo (Embedded Mongo)
+4. Start shareoo-services (Event Driven)   
+
+### Omissions
+1. Security
+2. Cloud Config / Testing
+3. Resiliency / Testing
+4. BDD Covering Events
+5. Pipeline Config
+6. Gateway layer and caching
+
+ 
