@@ -1,5 +1,6 @@
 package roy.subhra.shareoo.repo.controllers;
 
+import org.apache.commons.lang.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.web.bind.annotation.*;
@@ -38,6 +39,9 @@ public class ShareooRepoController {
         Optional<User> optionalUser2 = userRepository.findById(user.getEmailId());
         if(optionalUser.isPresent() || optionalUser2.isPresent()){
             throw new DuplicateKeyException("User already Exists!");
+        }
+        if(StringUtils.isEmpty(user.getRegNumber())){
+            user.setRegNumber(null);
         }
         return userRepository.save(user);
     }
